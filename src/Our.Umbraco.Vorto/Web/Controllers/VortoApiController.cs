@@ -126,7 +126,7 @@ namespace Our.Umbraco.Vorto.Web.Controllers
                         if (xpathSectionsWithoutPropAlias.Any())
                         {
                             var lastSection = xpathSectionsWithoutPropAlias.LastOrDefault();
-                            ancestorNodeAlias = lastSection != null ? lastSection.Substring(lastSection.LastIndexOf(':') + 1) : string.Empty;
+                            ancestorNodeAlias = lastSection != null ? lastSection.Substring(lastSection.LastIndexOf(':') + 1) : string.Empty;                          
                         }
 
                         if (!string.IsNullOrWhiteSpace(ancestorNodeAlias))
