@@ -94,10 +94,16 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 			var preValues = Services.DataTypeService.GetPreValuesCollectionByDataTypeId(dtd.Id).PreValuesAsDictionary;
 			var languageSource = preValues.ContainsKey("languageSource") ? preValues["languageSource"].Value : "";
 			var primaryLanguage = preValues.ContainsKey("primaryLanguage") ? preValues["primaryLanguage"].Value : "";
-
+		    var content = Services.ContentService.GetById(id);
 			var languages = new List<Language>();
 
-			if (languageSource == "inuse")
+            //on create (before save), add the first language available to allow vorto to function.
+		    if (content != null)
+		    {
+		        var firstLang = ((IEnumerable<Language>)GetInstalledLanguages()).FirstOrDefault();
+                languages.Add(firstLang);
+            }
+			else if (languageSource == "inuse")
 			{
 				var xpath = preValues.ContainsKey("xpath") ? preValues["xpath"].Value : "";
 
@@ -109,24 +115,47 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 							string.Format("//*[@id={0} and @isDoc]", parentId)).Replace("$ancestorOrSelf",
 								string.Format("//*[@id={0} and @isDoc]", id != 0 ? id : parentId));
 
-					// Lookup language nodes
-					var nodeIds = uQuery.GetNodesByXPath(xpath).Select(x => x.Id).ToArray();
-					if (nodeIds.Any())
-					{
-						var db = ApplicationContext.Current.DatabaseContext.Database;
-						languages.AddRange(db.Query<string>(
-							string.Format(
-								"SELECT DISTINCT [languageISOCode] FROM [umbracoLanguage] JOIN [umbracoDomains] ON [umbracoDomains].[domainDefaultLanguage] = [umbracoLanguage].[id] WHERE [umbracoDomains].[domainRootStructureID] in ({0})",
-								string.Join(",", nodeIds)))
-							.Select(CultureInfo.GetCultureInfo)
-							.Select(x => new Language
-							{
-								IsoCode = x.Name,
-								Name = x.DisplayName,
-								NativeName = x.NativeName,
-                                IsRightToLeft = x.TextInfo.IsRightToLeft
-							}));
-					}
+				    var ancestorNodeAlias = string.Empty;
+				    var xpathSplit = xpath.Split('/');
+                    var propAlias = xpathSplit.LastOrDefault();
+
+				    if (!string.IsNullOrWhiteSpace(propAlias))
+				    {
+                        var xpathSectionsWithoutPropAlias = xpathSplit.Where(x => x != propAlias).ToList();
+
+                        if (xpathSectionsWithoutPropAlias.Any())
+                        {
+                            var lastSection = xpathSectionsWithoutPropAlias.LastOrDefault();
+                            ancestorNodeAlias = lastSection != null ? lastSection.Substring(lastSection.LastIndexOf(':') + 1) : string.Empty;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(ancestorNodeAlias))
+                        {
+                            var ancestor = Services.ContentService.GetAncestors(id).FirstOrDefault(x => x.ContentType.Alias == ancestorNodeAlias);
+
+                            if (ancestor != null && ancestor.HasProperty(propAlias))
+                            {
+                                var replacements = new Dictionary<string, string>() { { "[", string.Empty }, { "]", string.Empty }, { "\"", string.Empty }, { "\\s+", string.Empty } };
+                                var langs = ancestor.GetValue<string>(propAlias).ReplaceMany(replacements).Trim().Split(',');
+
+                                if (langs.Any())
+                                {
+                                    languages.AddRange(langs.Select(CultureInfo.GetCultureInfo).Select(x => new Language
+                                    {
+                                        IsoCode = x.Name,
+                                        Name = x.DisplayName,
+                                        NativeName = x.NativeName
+                                    }));
+                                }
+                            }
+                        }
+                    }
+
+				    if (!languages.Any())
+				    {
+                        var firstLang = ((IEnumerable<Language>)GetInstalledLanguages()).FirstOrDefault();
+                        languages.Add(firstLang);
+                    }
 				}
 				else
 				{
