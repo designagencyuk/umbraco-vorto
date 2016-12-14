@@ -98,7 +98,7 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 			var languages = new List<Language>();
 
             //on create (before save), add the first language available to allow vorto to function.
-		    if (content != null)
+		    if (content == null)
 		    {
 		        var firstLang = ((IEnumerable<Language>)GetInstalledLanguages()).FirstOrDefault();
                 languages.Add(firstLang);
