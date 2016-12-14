@@ -14,6 +14,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 [assembly: AssemblyVersion("1.5.*")]
-[assembly: AssemblyInformationalVersion("1.5.3.2-kawasaki-pd")]
+[assembly: AssemblyInformationalVersion("1.5.3.4-kawasaki-pd")]
 
 

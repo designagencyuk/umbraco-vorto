@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Http;
 using umbraco;
@@ -135,8 +136,9 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 
                             if (ancestor != null && ancestor.HasProperty(propAlias))
                             {
-                                var replacements = new Dictionary<string, string>() { { "[", string.Empty }, { "]", string.Empty }, { "\"", string.Empty }, { "\\s+", string.Empty } };
-                                var langs = ancestor.GetValue<string>(propAlias).ReplaceMany(replacements).Trim().Split(',');
+                                var replacements = new Dictionary<string, string>() { { "[", string.Empty }, { "]", string.Empty }, { "\"", string.Empty } };
+                                var propVal = ancestor.GetValue<string>(propAlias);
+                                var langs = Regex.Replace(propVal.ReplaceMany(replacements), "\\s+", string.Empty).Split(',');
 
                                 if (langs.Any())
                                 {
