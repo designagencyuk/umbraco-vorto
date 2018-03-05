@@ -6,6 +6,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Http;
+using Our.Umbraco.Vorto.Web.PropertyEditors;
 using umbraco;
 using Umbraco.Core;
 using Umbraco.Core.Models;
@@ -22,7 +23,7 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 		public IEnumerable<object> GetNonVortoDataTypes()
 		{
 			return Services.DataTypeService.GetAllDataTypeDefinitions()
-				.Where(x => x.PropertyEditorAlias != "Our.Umbraco.Vorto")
+				.Where(x => x.PropertyEditorAlias != VortoPropertyEditor.PropertyEditorAlias)
 				.OrderBy(x => x.SortOrder)
 				.Select(x => new
 				{
@@ -55,10 +56,7 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 		            break;
 		    }
 
-		    if (ct == null)
-		        return null;
-
-			var prop = ct.CompositionPropertyTypes.SingleOrDefault(x => x.Alias == propertyAlias);
+		    var prop = ct?.CompositionPropertyTypes.SingleOrDefault(x => x.Alias == propertyAlias);
 			if (prop == null)
 				return null;
 
@@ -95,39 +93,40 @@ namespace Our.Umbraco.Vorto.Web.Controllers
 			var preValues = Services.DataTypeService.GetPreValuesCollectionByDataTypeId(dtd.Id).PreValuesAsDictionary;
 			var languageSource = preValues.ContainsKey("languageSource") ? preValues["languageSource"].Value : "";
 			var primaryLanguage = preValues.ContainsKey("primaryLanguage") ? preValues["primaryLanguage"].Value : "";
-		    var content = Services.ContentService.GetById(id);
+            var content = Services.ContentService.GetById(id);
 			var languages = new List<Language>();
 
-            //on create (before save), add the first language available to allow vorto to function.
-		    if (content == null)
-		    {
-		        var firstLang = ((IEnumerable<Language>)GetInstalledLanguages()).FirstOrDefault();
-                languages.Add(firstLang);
-            }
-			else if (languageSource == "inuse")
+			if (languageSource == "inuse")
 			{
-				var xpath = preValues.ContainsKey("xpath") ? preValues["xpath"].Value : "";
+                var currentNode = id != 0 ? Umbraco.TypedContent(id) : null;
+                var currentNodeIsUnpublished = currentNode == null;
+                var parentOrSelfId = currentNodeIsUnpublished ? parentId : id;
 
-				// Grab languages by xpath (only if in content section)
-                if (!string.IsNullOrWhiteSpace(xpath) && section == "content")
-				{
-					xpath = xpath.Replace("$currentPage",
-						string.Format("//*[@id={0} and @isDoc]", id)).Replace("$parentPage",
-							string.Format("//*[@id={0} and @isDoc]", parentId)).Replace("$ancestorOrSelf",
-								string.Format("//*[@id={0} and @isDoc]", id != 0 ? id : parentId));
+                // trying to add/publish a home node, so no "in use" languages have been defined/are accessible - display all installed in the interim
+                var currentNodeIsUnpublishedRootNode = currentNodeIsUnpublished && parentId == -1;
 
-				    var ancestorNodeAlias = string.Empty;
-				    var xpathSplit = xpath.Split('/');
+                var xpath = preValues.ContainsKey("xpath") ? preValues["xpath"].Value : "";
+
+                // Grab languages by xpath (only if in content section)
+                if (!currentNodeIsUnpublishedRootNode && !string.IsNullOrWhiteSpace(xpath) && section == "content")
+                {
+                    xpath = xpath.Replace("$currentPage",
+                        $"//*[@id={id} and @isDoc]").Replace("$parentPage",
+                            $"//*[@id={parentId} and @isDoc]").Replace("$ancestorOrSelf",
+                               $"//*[@id={parentOrSelfId} and @isDoc]");
+
+                    var ancestorNodeAlias = string.Empty;
+                    var xpathSplit = xpath.Split('/');
                     var propAlias = xpathSplit.LastOrDefault();
 
-				    if (!string.IsNullOrWhiteSpace(propAlias))
-				    {
+                    if (!string.IsNullOrWhiteSpace(propAlias))
+                    {
                         var xpathSectionsWithoutPropAlias = xpathSplit.Where(x => x != propAlias).ToList();
 
                         if (xpathSectionsWithoutPropAlias.Any())
                         {
                             var lastSection = xpathSectionsWithoutPropAlias.LastOrDefault();
-                            ancestorNodeAlias = lastSection != null ? lastSection.Substring(lastSection.LastIndexOf(':') + 1) : string.Empty;                          
+                            ancestorNodeAlias = lastSection != null ? lastSection.Substring(lastSection.LastIndexOf(':') + 1) : string.Empty;
                         }
 
                         if (!string.IsNullOrWhiteSpace(ancestorNodeAlias))
@@ -153,13 +152,29 @@ namespace Our.Umbraco.Vorto.Web.Controllers
                         }
                     }
 
-				    if (!languages.Any())
-				    {
-                        var firstLang = ((IEnumerable<Language>)GetInstalledLanguages()).FirstOrDefault();
-                        languages.Add(firstLang);
+                    if (!languages.Any())
+                    {
+                        // Lookup language nodes
+                        var nodeIds = uQuery.GetNodesByXPath(xpath).Select(x => x.Id).ToArray();
+                        if (nodeIds.Any())
+                        {
+                            var db = ApplicationContext.Current.DatabaseContext.Database;
+                            languages.AddRange(db.Query<string>(
+                                    string.Format(
+                                        "SELECT DISTINCT [languageISOCode] FROM [umbracoLanguage] JOIN [umbracoDomains] ON [umbracoDomains].[domainDefaultLanguage] = [umbracoLanguage].[id] WHERE [umbracoDomains].[domainRootStructureID] in ({0})",
+                                        string.Join(",", nodeIds)))
+                                .Select(CultureInfo.GetCultureInfo)
+                                .Select(x => new Language
+                                {
+                                    IsoCode = x.Name,
+                                    Name = x.DisplayName,
+                                    NativeName = x.NativeName,
+                                    IsRightToLeft = x.TextInfo.IsRightToLeft
+                                }));
+                        }
                     }
-				}
-				else
+                }
+                else
 				{
 					// No language node xpath so just return a list of all languages in use
 					var db = ApplicationContext.Current.DatabaseContext.Database;

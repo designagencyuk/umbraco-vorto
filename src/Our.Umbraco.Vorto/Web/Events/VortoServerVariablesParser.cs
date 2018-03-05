@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Web;
 using Umbraco.Core;
-using Umbraco.Core.Persistence;
 using Umbraco.Web.UI.JavaScript;
 using System.Web.Routing;
 using System.Web.Mvc;
@@ -29,8 +26,7 @@ namespace Our.Umbraco.Vorto.Web.Events
             var mainDictionary = new Dictionary<string, object>
             {
                 {
-                    "apiBaseUrl",
-                    urlHelper.GetUmbracoApiServiceBaseUrl<VortoApiController>(
+                    "apiBaseUrl", urlHelper.GetUmbracoApiServiceBaseUrl<VortoApiController>(
                         controller => controller.GetInstalledLanguages())
                 }
             };
